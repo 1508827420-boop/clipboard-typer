@@ -1,0 +1,7 @@
+/runtime/
+/设置.ini
+/*.bak
+/*错误.txt
+/验收结果.txt
+/*.zip
+/.publish/

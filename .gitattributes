@@ -1,0 +1,6 @@
+* text=auto
+*.ahk text eol=crlf
+# Keep CRLF in Git blobs too, so GitHub source ZIP launchers work in cmd.exe.
+*.cmd -text whitespace=cr-at-eol
+*.ps1 text eol=crlf
+*.md text eol=lf
