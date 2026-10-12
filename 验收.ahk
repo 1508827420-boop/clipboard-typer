@@ -152,6 +152,7 @@ RunChecks() {
         if field.Value != A_Clipboard
             output .= "重输诊断: [" field.Value "]`n"
         RevisionEnabled := false
+        CheckAdvanced(field, &output)
         field.Value := ""
         field.Focus()
         A_Clipboard := StrRepeat("窗口测试", 40)
@@ -205,3 +206,50 @@ StrRepeat(value, count) {
     return result
 }
 RunChecks()
+
+CheckAdvanced(field, &output) {
+    global AdvancedEnabled, AdvancedPairsText, AdvancedUnit, AdvancedEveryMin, AdvancedEveryMax
+    global AdvancedBackMin, AdvancedBackMax, AdvancedSizeMin, AdvancedSizeMax, DelayMs
+    AdvancedEnabled := true, AdvancedUnit := "words"
+    AdvancedEveryMin := 25, AdvancedEveryMax := 45
+    AdvancedBackMin := 20, AdvancedBackMax := 30, AdvancedSizeMin := 5, AdvancedSizeMax := 10
+    AdvancedPairsText := "This was a rough sentence. => This is the clear final sentence."
+    Check(UnitCount("one two three") = 3, "高级版英文按词计数", &output)
+    rejected := false
+    try ParseAdvancedPairs("hello => hello")
+    catch
+        rejected := true
+    Check(rejected, "高级版拒绝不合范围或无实际差异的配置", &output)
+    field.Value := "", field.Focus()
+    DelayMs := 10
+    A_Clipboard := StrRepeat("x ", 20) "This is the clear final sentence." StrRepeat(" y", 30)
+    StartTyping()
+    started := A_TickCount
+    while Running && !AdvancedPending && A_TickCount - started < 6000
+        Sleep 10
+    Check(AdvancedPending != 0, "高级版按回看范围安排修订前停顿", &output)
+    PauseTyping()
+    Sleep 50
+    saved := field.Value
+    Sleep 100
+    Check(Paused && field.Value = saved, "高级版待修订时可以暂停", &output)
+    TogglePause()
+    WaitDone()
+    Check(AdvancedCount = 1 && field.Value = A_Clipboard,
+        "高级版回看替换不同长度句段后，最终正文一致", &output)
+    field.Value := "", field.Focus()
+    A_Clipboard := "This is the clear final sentence. This is the clear final sentence."
+    StartTyping()
+    WaitDone()
+    Check(AdvancedCount = 2 && field.Value = A_Clipboard,
+        "高级版短文结尾补完，重复片段偏移正确", &output)
+    AdvancedUnit := "chars"
+    Check(UnitCount("中文 AB") = 4, "高级版中文模式按非空白字符计数", &output)
+    AdvancedPairsText := "这是草稿句子 => 这是定稿句子"
+    field.Value := "", field.Focus()
+    A_Clipboard := "前文。这是定稿句子。后文。"
+    StartTyping()
+    WaitDone()
+    Check(AdvancedCount = 1 && field.Value = A_Clipboard, "高级版中文句段替换后正文一致", &output)
+    AdvancedEnabled := false, DelayMs := 20
+}

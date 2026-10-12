@@ -11,6 +11,7 @@ global LastStatus := ""
 global Testing := A_Args.Length && A_Args[1] = "--test"
 global ConfigFile := A_ScriptDir "\设置.ini"
 #Include 行为节奏.ahk
+#Include 高级修订.ahk
 
 if !Testing {
     DelayMs := Max(10, Min(500, Integer(IniRead(ConfigFile, "输入", "每字间隔毫秒", "40"))))
@@ -41,12 +42,19 @@ StartTyping() {
         return
     }
     if (SettingsWindow && WinActive("ahk_id " SettingsWindow.Hwnd))
-        || (BehaviorWindow && WinActive("ahk_id " BehaviorWindow.Hwnd)) {
+        || (BehaviorWindow && WinActive("ahk_id " BehaviorWindow.Hwnd))
+        || (AdvancedWindow && WinActive("ahk_id " AdvancedWindow.Hwnd)) {
         Notify("请先点击要输入文字的目标输入框，再按 F8。")
         return
     }
     ; CRLF is one line break. Preserve surrogate pairs such as emoji.
     text := StrReplace(StrReplace(text, "`r`n", "`n"), "`r", "`n")
+    try {
+        text := PrepareAdvanced(text)
+    } catch as err {
+        Notify(err.Message)
+        return
+    }
     Characters := []
     offset := 1
     while offset <= StrLen(text) {
@@ -92,12 +100,22 @@ WatchFocus() {
 
 TypeNext() {
     global Running, Cancelled, Position, Characters
+    global AdvancedPending, AdvancedNext
     if !Running || Cancelled || Paused
         return
     if !WinActive("ahk_id " TargetWindow)
         || (TargetControl && FocusedControl(TargetWindow) != TargetControl) {
         FinishTyping("焦点已改变，输入已停止。")
         return
+    }
+    if AdvancedPending {
+        pending := AdvancedPending
+        AdvancedPending := 0
+        if !ApplyAdvancedRevision(pending) {
+            FinishTyping("高级修订未完成，已停止；请检查光标和正文中的草稿。")
+            return
+        }
+        AdvancedNext := UnitCount(StreamPart(1, Position - 1)) + Random(AdvancedEveryMin, AdvancedEveryMax)
     }
     if Position > Characters.Length {
         FinishTyping("输入完成。")
@@ -119,6 +137,10 @@ TypeNext() {
     }
     if Running {
         RecordCharacter(char)
+        if AdvancedEnabled && !MaybeAdvancedRevision(Position > Characters.Length) {
+            FinishTyping("高级修订未完成，已停止。请检查光标位置和目标编辑器；正文可能仍有草稿。")
+            return
+        }
         if Position > Characters.Length
             FinishTyping("输入完成。")
         else if BatchEnabled && BatchPrinted >= BatchSize
@@ -161,10 +183,12 @@ StopTyping() {
 
 FinishTyping(message) {
     global Running, Characters, Paused
+    global AdvancedPending
     SetTimer TypeNext, 0
     SetTimer WatchFocus, 0
     Running := false
     Paused := false
+    AdvancedPending := 0
     Characters := []
     Notify(message)
 }

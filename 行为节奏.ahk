@@ -71,7 +71,7 @@ ScheduleNext(previous := "") {
     global LastDelay
     if !Running || Paused
         return
-    LastDelay := BehaviorDelay(previous)
+    LastDelay := AdvancedPending ? Random(700, 1800) : BehaviorDelay(previous)
     SetTimer TypeNext, -LastDelay
 }
 
@@ -79,7 +79,7 @@ RecordCharacter(char) {
     global Printed, BatchPrinted, NextRevision
     Printed += 1
     BatchPrinted += 1
-    if RevisionEnabled && Printed >= NextRevision {
+    if RevisionEnabled && !AdvancedEnabled && Printed >= NextRevision {
         RevisitEarlierCharacter()
         NextRevision := Printed + RandomCount(RevisionEvery)
     }
@@ -209,6 +209,7 @@ ShowBehaviorSettings() {
     win.AddText("x30 y160 w495", "在已输入末尾前 3～12 个字符处，选中一个中英文字符并原样重输，再把光标移回末尾。最终文字应保持一致。`n`n自动跳过含 emoji、组合字符或换行的相关片段。富文本、自动补全及特殊编辑器可能改变光标行为，请先在你的目标软件中用短文本试验。`n`n这是模拟编辑动作，不是实际改写内容；不能保证网站计入修订分数。")
     tabs.UseTab()
     win.AddButton("x15 y440 w170 h32 Default", "保存并收起").OnEvent("Click", SaveBehavior)
+    win.AddButton("x200 y440 w200 h32", "高级句段修订（可选）").OnEvent("Click", (*) => ShowAdvancedSettings())
     win.OnEvent("Close", (*) => win.Hide())
     win.Show()
 
