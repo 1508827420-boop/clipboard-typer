@@ -54,15 +54,15 @@ BehaviorDelay(previous := "") {
         delay := Max(10, Round(delay * BurstFactor))
         BurstRemaining -= 1
     }
-    if LongPauseEnabled && Printed >= NextLongPause {
+    if LongPauseEnabled && Printed + RevisionActions >= NextLongPause {
         delay += Random(LongMinMs, LongMaxMs)
-        NextLongPause := Printed + RandomCount(PauseEvery)
+        NextLongPause := Printed + RevisionActions + RandomCount(PauseEvery)
         LongPauseCount += 1
     }
     if CapEnabled {
-        ; Limit the cumulative rate of original output; manual rests are excluded.
+        ; Advanced deletion/retyping actions share the same cumulative speed cap.
         elapsed := A_TickCount - PaceStarted - HeldTime
-        delay := Max(delay, Ceil((Printed + 1) * 60000 / CharPerMinute - elapsed))
+        delay := Max(delay, Ceil((Printed + RevisionActions + 1) * 60000 / CharPerMinute - elapsed))
     }
     return Max(1, delay)
 }
@@ -71,7 +71,7 @@ ScheduleNext(previous := "") {
     global LastDelay
     if !Running || Paused
         return
-    LastDelay := AdvancedPending ? Random(700, 1800) : BehaviorDelay(previous)
+    LastDelay := (!AdvancedActive && AdvancedPending) ? Random(700, 1800) : BehaviorDelay(previous)
     SetTimer TypeNext, -LastDelay
 }
 
@@ -183,9 +183,9 @@ ShowBehaviorSettings() {
     burst.Value := BurstEnabled
     cap := win.AddCheckbox("x30 y90", "限制从本次开始累计的平均输入速度")
     cap.Value := CapEnabled
-    win.AddText("x30 y125", "每分钟原文字符上限（30～6000）")
+    win.AddText("x30 y125", "平均速度上限，字符／分钟（30～6000）")
     rate := win.AddEdit("x30 y152 w110 Number", CharPerMinute)
-    win.AddText("x30 y195 w495", "这里按字符计数，中文每字计一字符；英文不按单词计数。`n人工暂停时间不计入平均速度。自动长暂停计入。`nF10 暂停／继续；F9 结束并清除续输位置。")
+    win.AddText("x30 y195 w495", "按字符计数；高级版每次删字及重输字符也计入限速。`n人工暂停时间不计入，自动长暂停计入。`nF10 暂停／继续；F9 结束并清除续输位置。")
     win.AddText("x30 y290 w495", "基础固定／随机间隔与标点停顿在主设置中调整。`n分段变速会在基础间隔上乘以随机系数；速度上限可能进一步延长间隔。")
     tabs.UseTab(2)
     longPause := win.AddCheckbox("x30 y48", "随机长暂停（每次严格超过两秒）")

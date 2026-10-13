@@ -100,7 +100,7 @@ WatchFocus() {
 
 TypeNext() {
     global Running, Cancelled, Position, Characters
-    global AdvancedPending, AdvancedNext
+    global AdvancedPending, AdvancedNext, AdvancedActive
     if !Running || Cancelled || Paused
         return
     if !WinActive("ahk_id " TargetWindow)
@@ -108,14 +108,28 @@ TypeNext() {
         FinishTyping("焦点已改变，输入已停止。")
         return
     }
+    if AdvancedActive {
+        if !StepAdvancedRevision() {
+            FinishTyping("逐字修订已停止，请检查正文及光标位置。")
+            return
+        }
+        if !AdvancedActive
+            MaybeAdvancedRevision(Position > Characters.Length)
+        if !AdvancedActive && !AdvancedPending && Position > Characters.Length
+            FinishTyping("输入完成。")
+        else
+            ScheduleNext(RevisionPrevious)
+        return
+    }
     if AdvancedPending {
         pending := AdvancedPending
         AdvancedPending := 0
-        if !ApplyAdvancedRevision(pending) {
+        if !BeginAdvancedRevision(pending) {
             FinishTyping("高级修订未完成，已停止；请检查光标和正文中的草稿。")
             return
         }
-        AdvancedNext := UnitCount(StreamPart(1, Position - 1)) + Random(AdvancedEveryMin, AdvancedEveryMax)
+        ScheduleNext()
+        return
     }
     if Position > Characters.Length {
         FinishTyping("输入完成。")
@@ -141,7 +155,7 @@ TypeNext() {
             FinishTyping("高级修订未完成，已停止。请检查光标位置和目标编辑器；正文可能仍有草稿。")
             return
         }
-        if Position > Characters.Length
+        if Position > Characters.Length && !AdvancedPending
             FinishTyping("输入完成。")
         else if BatchEnabled && BatchPrinted >= BatchSize
             PauseTyping("本批已完成，休息后回到原输入框按 F10 继续。")
@@ -183,12 +197,13 @@ StopTyping() {
 
 FinishTyping(message) {
     global Running, Characters, Paused
-    global AdvancedPending
+    global AdvancedPending, AdvancedActive
     SetTimer TypeNext, 0
     SetTimer WatchFocus, 0
     Running := false
     Paused := false
     AdvancedPending := 0
+    AdvancedActive := 0
     Characters := []
     Notify(message)
 }

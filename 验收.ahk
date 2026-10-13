@@ -190,7 +190,7 @@ WaitPaused() {
 WaitDone() {
     global Running
     started := A_TickCount
-    while Running && A_TickCount - started < 6000
+    while Running && A_TickCount - started < 18000
         Sleep 20
     if Running
         throw Error("输入超时")
@@ -207,10 +207,18 @@ StrRepeat(value, count) {
 }
 RunChecks()
 
+global RevisionTrace := [], RevisionTraceEnabled := false
+TraceRevisionField(control, *) {
+    global RevisionTrace
+    if RevisionTraceEnabled
+        RevisionTrace.Push({Time: A_TickCount, Size: StrLen(control.Value)})
+}
+
 CheckAdvanced(field, &output) {
     global AdvancedEnabled, AdvancedPairsText, AdvancedUnit, AdvancedEveryMin, AdvancedEveryMax
     global AdvancedBackMin, AdvancedBackMax, AdvancedSizeMin, AdvancedSizeMax, DelayMs
-    AdvancedEnabled := true, AdvancedUnit := "words"
+    global AdvancedMode, RevisionTrace, RevisionTraceEnabled, CapEnabled, CharPerMinute
+    AdvancedEnabled := true, AdvancedUnit := "words", AdvancedMode := "draft"
     AdvancedEveryMin := 25, AdvancedEveryMax := 45
     AdvancedBackMin := 20, AdvancedBackMax := 30, AdvancedSizeMin := 5, AdvancedSizeMax := 10
     AdvancedPairsText := "This was a rough sentence. => This is the clear final sentence."
@@ -251,5 +259,72 @@ CheckAdvanced(field, &output) {
     StartTyping()
     WaitDone()
     Check(AdvancedCount = 1 && field.Value = A_Clipboard, "高级版中文句段替换后正文一致", &output)
+    AdvancedMode := "repeat", AdvancedPairsText := ""
+    field.Value := "", field.Focus()
+    A_Clipboard := "前文。这是定稿句子。后文。"
+    StartTyping()
+    WaitDone()
+    Check(AdvancedCount = 1 && field.Value = A_Clipboard, "定稿重输无需配对且不改变最终正文", &output)
+    AdvancedUnit := "words"
+    field.Value := "", field.Focus()
+    A_Clipboard := "This is the clear final sentence. This is another simple final sentence."
+    StartTyping()
+    WaitDone()
+    Check(AdvancedCount = 1 && field.Value = A_Clipboard, "定稿重输优先完整英文句且短文最多补一次", &output)
+    AdvancedUnit := "chars", AdvancedMode := "draft"
+    AdvancedPairsText := "这是草稿句子 => 这是定稿句子"
+    for timingMode in ["draft", "repeat"] {
+    AdvancedMode := timingMode
+    field.Value := "", field.Focus()
+    DelayMs := 40
+    RevisionTrace := [], RevisionTraceEnabled := true
+    field.OnEvent("Change", TraceRevisionField)
+    A_Clipboard := "这是定稿句子"
+    StartTyping()
+    WaitDone()
+    RevisionTraceEnabled := false
+    field.OnEvent("Change", TraceRevisionField, 0)
+    deletes := 0, retypes := 0, previous := 0, lastTick := 0, paced := true, sawDelete := false
+    for sample in RevisionTrace {
+        if sample.Size < previous {
+            deletes += previous - sample.Size
+            sawDelete := true
+            if lastTick
+                paced := paced && sample.Time - lastTick >= 30
+            lastTick := sample.Time
+        } else if sawDelete && sample.Size > previous {
+            retypes += sample.Size - previous
+            paced := paced && sample.Time - lastTick >= 30
+            lastTick := sample.Time
+        }
+        previous := sample.Size
+    }
+    Check(deletes = 6 && retypes = 6 && paced, (timingMode = "draft" ? "草稿" : "定稿") "模式逐字删除与重输实际遵守40毫秒间隔", &output)
+    Check(field.Value = A_Clipboard && RevisionActions = 12, "删除与重输动作正确计数且最终定稿一致", &output)
+    }
+    AdvancedMode := "repeat", DelayMs := 60
+    field.Value := "", field.Focus()
+    StartTyping()
+    started := A_TickCount
+    while Running && (!AdvancedActive || RevisionActions < 1) && A_TickCount - started < 6000
+        Sleep 10
+    PauseTyping()
+    Sleep 30
+    saved := field.Value
+    Sleep 150
+    Check(Paused && field.Value = saved, "定稿模式逐字删除途中可暂停", &output)
+    TogglePause()
+    WaitDone()
+    Check(field.Value = A_Clipboard, "定稿模式删除中暂停续输后正文一致", &output)
+    field.Value := "", field.Focus()
+    StartTyping()
+    started := A_TickCount
+    while Running && (!AdvancedActive || AdvancedActive.Phase != "input" || RevisionActions < 7)
+        && A_TickCount - started < 6000
+        Sleep 10
+    StopTyping()
+    saved := field.Value
+    Sleep 200
+    Check(!Running && !AdvancedActive && field.Value = saved, "重新输入途中结束后不会继续删改", &output)
     AdvancedEnabled := false, DelayMs := 20
 }
